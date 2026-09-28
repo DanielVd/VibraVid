@@ -80,11 +80,31 @@ def _resolve_source(source: dict):
             console.print(f"[yellow][Cinezo] {name}: HTTP {r.status_code}")
             return None
     except Exception as e:
-        console.print(f"[yellow][Cinezo] {name}: exception → {e}")
+        console.print(f"[yellow][Cinezo] {name}: exception -> {e}")
         return None
 
     console.print(f"[green][Cinezo] {name}: OK")
     return stream_url, headers
+
+
+def _parse_sources_response(response, tmdb_id: int) -> dict:
+    """Validate and parse the legacy Cinezo sources API response."""
+    content_type = (response.headers.get("content-type") or "").lower()
+    if "json" not in content_type:
+        raise RuntimeError(
+            f"[Cinezo] Sources API returned non-JSON content "
+            f"({content_type or 'unknown content type'}) for tmdb_id={tmdb_id}"
+        )
+
+    try:
+        data = response.json()
+    except ValueError as error:
+        raise RuntimeError(f"[Cinezo] Sources API returned invalid JSON for tmdb_id={tmdb_id}") from error
+
+    if not isinstance(data, dict):
+        raise RuntimeError(f"[Cinezo] Sources API returned an unexpected JSON payload for tmdb_id={tmdb_id}")
+
+    return data
 
 
 def get_stream(tmdb_id: int, media_type: str, season: int | None = None, episode: int | None = None):
@@ -110,7 +130,7 @@ def get_stream(tmdb_id: int, media_type: str, season: int | None = None, episode
     if not r.ok:
         raise RuntimeError(f"[Cinezo] Sources API HTTP {r.status_code} for tmdb_id={tmdb_id}")
 
-    data = r.json()
+    data = _parse_sources_response(r, tmdb_id)
     sources = data.get("sources") or []
     subtitle_tracks = _subs_to_tracks(data.get("tracks"))
 
